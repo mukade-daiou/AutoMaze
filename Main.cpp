@@ -8,7 +8,7 @@ struct Player {
 	double speed = 0.5;
 	Stopwatch stopwatch;
 	Array<Vec2>route;
-	Player(Vec2 _pos, int _size) :pos(_pos), size(_size) {}
+	Player() {}
 	void draw() {
 		texture.resized(size).drawAt(pos);
 		if(debug&&!route.empty())
@@ -38,7 +38,7 @@ struct Player {
 			}
 		}
 	}
-	void switchAuto(Array<Vec2>_route) {
+	void switchAuto(Array<Vec2>_route = {}) {
 		if (autoMove) {
 			speed = 5.0;
 			route = _route;
@@ -74,7 +74,7 @@ struct Field {
 		Line{StartPos + Vec2{0,SIZE.y},StartPos + SIZE},
 		Line{StartPos + Vec2{SIZE.x,0},StartPos+SIZE}
 	};
-	Field() {}
+	Field(){}
 	bool addLine(Vec2 p1,Vec2 p2) {
 		Vec2 from, to;
 		if (p1.x < p2.x || p1.y < p2.y)
@@ -88,8 +88,20 @@ struct Field {
 			return true;
 		}
 	}
-	void createMaze(int _size=20,int mode=1) {
-		size = _size;
+	void createMaze(Player& pl) {
+		Array<int>level{ 20,40 };
+		size = level.choice();
+		lines.clear();
+		lines << Line{ StartPos,StartPos + Vec2{SIZE.x,0} };
+		lines << Line{ StartPos,StartPos + Vec2{0,SIZE.y} };
+		lines << Line{ StartPos + Vec2{0,SIZE.y},StartPos + SIZE };
+		lines << Line{ StartPos + Vec2{SIZE.x,0},StartPos + SIZE };
+		pl.size = (int)size*0.7;
+		pl.pos = StartPos + Vec2(size / 2, size / 2);
+		if (pl.autoMove) {
+			pl.autoMove = false;
+			pl.switchAuto();
+		}
 		for(int y=size;y<SIZE.y;y+=size)
 			for (int x = size; x < SIZE.x; x += size) {
 				Vec2 pos=Vec2(x,y)+StartPos;
@@ -113,6 +125,7 @@ struct Field {
 		createGraph();
 	}
 	void createGraph() {
+		graph.clear();
 		for(int y=size;y<=SIZE.y;y+=size)
 			for (int x = size; x <= SIZE.x; x += size) {
 				Vec2 pos = Vec2(x, y) + StartPos;
@@ -147,7 +160,11 @@ struct Field {
 				for (auto v : value)
 					Line(key, v).draw(Palette::Yellow);
 					*/
-
+	}
+	bool cleared(Player pl) {
+		RectF plRegion = RectF{ Arg::center(pl.pos),(double)pl.size },
+			goalRegion = RectF{ Arg::center(StartPos + SIZE - Vec2{size/2,size/2}),(double)size };
+		return goalRegion.intersects(plRegion);
 	}
 	Array<Vec2> BFS(Vec2 _pos) {
 		Vec2 pos =_pos-StartPos;
@@ -179,16 +196,22 @@ void Main()
 	Scene::SetResizeMode(ResizeMode::Keep);
 	Scene::Resize(1000, 700);
 	Window::Resize(1000, 700);
-	Field field{};
-	field.createMaze();
-	Player pl{ field.StartPos + Vec2 {field.size/2,field.size/2},static_cast<int>(field.size*0.7)};
+	Field field;
+	Player pl;
+	field.createMaze(pl);
 	while (System::Update())
 	{
-		if (SimpleGUI::CheckBox(pl.autoMove, U"AUTO", Vec2{ 850,150 }))
+		if (field.cleared(pl))
+			if (SimpleGUI::ButtonAt(U"NEXT", Vec2{ 500,350 }))
+				field.createMaze(pl);
+		if (SimpleGUI::CheckBox(pl.autoMove, U"AUTO", Vec2{ 850,150 },unspecified,!field.cleared(pl)))
 			pl.switchAuto(field.BFS(pl.pos));
 		SimpleGUI::CheckBox(pl.debug, U"DEBUG", Vec2{ 850,250 });
 		pl.Move(field.lines);
 		field.draw();
 		pl.draw();
+		if (field.cleared(pl))
+			if (SimpleGUI::ButtonAt(U"NEXT", Vec2{ 500,350 }))
+				field.createMaze(pl);
 	}
 }
